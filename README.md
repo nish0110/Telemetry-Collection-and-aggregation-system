@@ -146,8 +146,9 @@ Telemetry-Collection-and-aggregation-system/
 
 ## 👨‍💻 Authors
 
-- Name 1
-- Name 2
+- Nishitha Padanthaya
+- Samvith Vaddiparthi
+- Avyukth K.V
 
 ---
 
