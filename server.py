@@ -1,50 +1,65 @@
 import socket
-import struct
-import time
+import ssl
+import threading
+import json
 
-# Configuration
-IP = "0.0.0.0"
-PORT = 8080
+HOST = "0.0.0.0"
+PORT = 5000
 
-# CHANGE HERE: Added '<' to force Little Endian and 20-byte alignment
-PACKET_FORMAT = "<Idff" 
+context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.load_cert_chain(certfile="server.crt", keyfile="server.key")
 
-def start_server():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((IP, PORT))
-    
-    print(f"Server listening on {PORT}...")
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((HOST, PORT))
+server.listen(5)
 
-    expected_seq = 0
-    lost_packets = 0
-    total_received = 0
+print("Secure Telemetry Server Running...")
 
-    try:
-        while True:
-            data, addr = sock.recvfrom(1024)
-            
-            # This will now correctly unpack exactly 20 bytes
-            try:
-                seq_num, timestamp, cpu, mem = struct.unpack(PACKET_FORMAT, data)
-                
-                # Simple packet loss tracking logic
-                if seq_num > expected_seq:
-                    lost_packets += (seq_num - expected_seq)
-                
-                total_received += 1
-                expected_seq = seq_num + 1
+clients = {}
 
-                # Print stats every 500 packets so you can see it working
-                if total_received % 500 == 0:
-                    print(f"Stats from {addr}: Received={total_received}, Lost={lost_packets}, CPU={cpu:.1f}%")
-            
-            except struct.error:
-                print(f"Received malformed packet of size {len(data)}")
+def handle_client(conn, addr):
 
-    except KeyboardInterrupt:
-        print("\nStopping Server...")
-    finally:
-        sock.close()
+    print("Connected:", addr)
 
-if __name__ == "__main__":
-    start_server()
+    while True:
+        try:
+            data = conn.recv(4096)
+            if not data:
+                break
+
+            packet = json.loads(data.decode())
+
+            client_id = packet["client_id"]
+            seq = packet["seq"]
+
+            if client_id not in clients:
+                clients[client_id] = {"last_seq":-1,"lost":0,"received":0}
+
+            c = clients[client_id]
+
+            if c["last_seq"] != -1 and seq > c["last_seq"] + 1:
+                c["lost"] += seq - c["last_seq"] - 1
+
+            c["last_seq"] = seq
+            c["received"] += 1
+
+            if c["received"] % 20 == 0:
+                print("\nClient:", client_id)
+                print("Received:", c["received"])
+                print("Lost:", c["lost"])
+
+        except:
+            break
+
+    conn.close()
+    print("Disconnected:", addr)
+
+
+while True:
+
+    client_socket, addr = server.accept()
+
+    secure_conn = context.wrap_socket(client_socket, server_side=True)
+
+    thread = threading.Thread(target=handle_client, args=(secure_conn, addr))
+    thread.start()
