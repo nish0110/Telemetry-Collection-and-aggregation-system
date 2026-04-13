@@ -1,39 +1,65 @@
 import socket
 import ssl
+import threading
 import json
-import time
-import random
-import sys
 
-SERVER_IP = "10.20.203.186"
+HOST = "0.0.0.0"
 PORT = 5000
 
-client_id = sys.argv[1] if len(sys.argv) > 1 else "client"
+context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.load_cert_chain(certfile="server.crt", keyfile="server.key")
 
-context = ssl.create_default_context()
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((HOST, PORT))
+server.listen(5)
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-secure_sock = context.wrap_socket(sock, server_hostname=SERVER_IP)
+print("Secure Telemetry Server Running...")
 
-secure_sock.connect((SERVER_IP, PORT))
+clients = {}
 
-print("Connected to server")
+def handle_client(conn, addr):
 
-seq = 0
+    print("Connected:", addr)
+
+    while True:
+        try:
+            data = conn.recv(4096)
+            if not data:
+                break
+
+            packet = json.loads(data.decode())
+
+            client_id = packet["client_id"]
+            seq = packet["seq"]
+
+            if client_id not in clients:
+                clients[client_id] = {"last_seq":-1,"lost":0,"received":0}
+
+            c = clients[client_id]
+
+            if c["last_seq"] != -1 and seq > c["last_seq"] + 1:
+                c["lost"] += seq - c["last_seq"] - 1
+
+            c["last_seq"] = seq
+            c["received"] += 1
+
+            if c["received"] % 20 == 0:
+                print("\nClient:", client_id)
+                print("Received:", c["received"])
+                print("Lost:", c["lost"])
+
+        except:
+            break
+
+    conn.close()
+    print("Disconnected:", addr)
+
 
 while True:
 
-    telemetry = {
-        "client_id": client_id,
-        "seq": seq,
-        "cpu": random.uniform(0,100),
-        "memory": random.uniform(0,100)
-    }
+    client_socket, addr = server.accept()
 
-    message = json.dumps(telemetry)
+    secure_conn = context.wrap_socket(client_socket, server_side=True)
 
-    secure_sock.send(message.encode())
-
-    seq += 1
-
-    time.sleep(1)
+    thread = threading.Thread(target=handle_client, args=(secure_conn, addr))
+    thread.start()

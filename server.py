@@ -1,65 +1,47 @@
 import socket
 import ssl
-import threading
 import json
+import os
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from datetime import datetime, timedelta
 
-HOST = "0.0.0.0"
+# --- GENERATE SELF-SIGNED CERT (For Lab Testing) ---
+if not os.path.exists("server.crt"):
+    print("[*] Generating self-signed certificate...")
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, u"localhost")])
+    cert = x509.CertificateBuilder().subject_name(subject).issuer_name(issuer).public_key(key.public_key()).serial_number(x509.random_serial_number()).not_valid_before(datetime.utcnow()).not_valid_after(datetime.utcnow() + timedelta(days=365)).add_extension(x509.SubjectAlternativeName([x509.DNSName(u"localhost")]), critical=False).sign(key, hashes.SHA256())
+    with open("server.key", "wb") as f: f.write(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL, serialization.NoEncryption()))
+    with open("server.crt", "wb") as f: f.write(cert.public_bytes(serialization.Encoding.PEM))
+
+# --- SERVER CONFIG ---
+IP = "127.0.0.1" 
 PORT = 5000
 
 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain(certfile="server.crt", keyfile="server.key")
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind((HOST, PORT))
-server.listen(5)
+server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_sock.bind((IP, PORT))
+server_sock.listen(5)
 
-print("Secure Telemetry Server Running...")
-
-clients = {}
-
-def handle_client(conn, addr):
-
-    print("Connected:", addr)
-
-    while True:
-        try:
-            data = conn.recv(4096)
-            if not data:
-                break
-
-            packet = json.loads(data.decode())
-
-            client_id = packet["client_id"]
-            seq = packet["seq"]
-
-            if client_id not in clients:
-                clients[client_id] = {"last_seq":-1,"lost":0,"received":0}
-
-            c = clients[client_id]
-
-            if c["last_seq"] != -1 and seq > c["last_seq"] + 1:
-                c["lost"] += seq - c["last_seq"] - 1
-
-            c["last_seq"] = seq
-            c["received"] += 1
-
-            if c["received"] % 20 == 0:
-                print("\nClient:", client_id)
-                print("Received:", c["received"])
-                print("Lost:", c["lost"])
-
-        except:
-            break
-
-    conn.close()
-    print("Disconnected:", addr)
-
+print(f"[*] Server listening on {IP}:{PORT}...")
 
 while True:
-
-    client_socket, addr = server.accept()
-
-    secure_conn = context.wrap_socket(client_socket, server_side=True)
-
-    thread = threading.Thread(target=handle_client, args=(secure_conn, addr))
-    thread.start()
+    client_conn, addr = server_sock.accept()
+    try:
+        with context.wrap_socket(client_conn, server_side=True) as secure_conn:
+            print(f"[+] Connection accepted from {addr}")
+            while True:
+                data = secure_conn.recv(1024).decode()
+                if not data: break
+                
+                # Handle potential multiple JSON objects in one stream
+                for line in data.strip().split('\n'):
+                    payload = json.loads(line)
+                    print(f"[Data] Client: {payload['client_id']} | CPU: {payload['cpu']:.2f}%")
+    except Exception as e:
+        print(f"[!] Error: {e}")
