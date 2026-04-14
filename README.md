@@ -4,7 +4,7 @@
 
 This project implements a secure, high-performance telemetry collection system using low-level UDP socket programming. Multiple distributed clients continuously send telemetry data to a central server. The server aggregates, analyzes, and reports statistics such as packet loss, throughput, and latency.
 
-All communication is secured using DTLS (Datagram Transport Layer Security).
+All communication is secured using SSL(Secure Socket Layer).
 
 ---
 
@@ -12,7 +12,7 @@ All communication is secured using DTLS (Datagram Transport Layer Security).
 
 - Implement UDP-based communication using low-level sockets
 - Support multiple concurrent clients
-- Ensure secure communication using DTLS
+- Ensure secure communication using SSL
 - Track sequence numbers and detect packet loss
 - Aggregate and summarize telemetry data
 - Perform scalability and performance evaluation
@@ -29,10 +29,10 @@ Client–Server Architecture (Multi-client)
 1. **Telemetry Client**
    - Generates telemetry data at configurable rates
    - Adds sequence number and timestamp
-   - Sends packets using UDP + DTLS
+   - Sends packets using UDP + SSL
 
 2. **Telemetry Server**
-   - Listens for incoming DTLS connections
+   - Listens for incoming DTLS(Datagram Transport Layer Security) connections
    - Receives and decrypts UDP packets
    - Tracks:
      - Packets received
@@ -115,12 +115,11 @@ cd Telemetry-Collection-and-aggregation-system
 
 ### 2️⃣ Run Server
 python server.py
+Make sure the server system is reachable over the network.
 
 ### 3️⃣ Run Client
-C client.py
-
-You can run multiple clients in separate terminals.
-
+python client.py
+You can run multiple clients on different machines to simulate distributed telemetry sources.
 ---
 
 ## 🛠 Optimizations Implemented
@@ -132,16 +131,6 @@ You can run multiple clients in separate terminals.
   - Client disconnect
   - Invalid packets
   - DTLS handshake failures
-
----
-
-## 📂 Repository Structure
-Telemetry-Collection-and-aggregation-system/
-│
-├── server/
-├── client/
-└── README.md
-
 ---
 
 ## 👨‍💻 Authors
