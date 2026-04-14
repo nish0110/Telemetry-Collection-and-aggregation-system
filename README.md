@@ -115,10 +115,12 @@ cd Telemetry-Collection-and-aggregation-system
 
 ### 2️⃣ Run Server
 python server.py
+
 Make sure the server system is reachable over the network.
 
 ### 3️⃣ Run Client
 python client.py
+
 You can run multiple clients on different machines to simulate distributed telemetry sources.
 ---
 
